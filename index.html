@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#173d50">
+<title>ハイキュー人生ゲーム</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#edf3f5;color:#193547;font-family:system-ui,sans-serif}
+header{background:#173d50;color:white;text-align:center;padding:20px}
+h1{margin:0;font-size:25px}
+main{max-width:750px;margin:auto;padding:12px}
+.box{background:white;border-radius:16px;padding:17px;margin-bottom:13px;box-shadow:0 3px 12px #0001}
+h2{font-size:19px;margin:0 0 12px}
+label{display:block;margin:10px 0 5px;font-weight:bold}
+input,select{width:100%;padding:12px;border:1px solid #bbb;border-radius:9px;font-size:16px}
+button{border:0;border-radius:12px;padding:13px 18px;background:#176b87;color:white;font-size:16px;font-weight:bold}
+button:disabled{opacity:.4}
+.orange{background:#f28c28;color:#222}
+.player{padding:10px;border:2px solid #ddd;border-radius:12px;margin:7px 0}
+.active{border-color:#f28c28;background:#fff8ec}
+.money{font-size:22px;font-weight:bold;color:#167452}
+#game,#result{display:none}
+#board{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.cell{min-height:75px;padding:7px;background:#f0f5f7;border-radius:9px;font-size:12px;font-weight:bold}
+.cell span{display:block;font-size:19px;margin-top:5px}
+#dice{font-size:40px;text-align:center;margin:10px}
+#event{display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;padding:20px}
+.dialog{background:white;padding:22px;border-radius:18px;max-width:420px;width:100%}
+.dialog button{margin:5px}
+#log{max-height:180px;overflow:auto;font-size:13px;line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+<h1>🏐 ハイキュー人生ゲーム</h1>
+<p>仲間と一緒に最高の人生を目指そう！</p>
+</header>
+
+<main>
+<section id="setup" class="box">
+<h2>🎮 プレイヤー設定</h2>
+<label>プレイヤー人数</label>
+<select id="count" onchange="makeInputs()">
+<option value="2">2人</option>
+<option value="3">3人</option>
+<option value="4">4人</option>
+</select>
+<div id="inputs"></div>
+<button class="orange" style="width:100%;margin-top:18px" onclick="startGame()">ゲーム開始！</button>
+</section>
+
+<section id="game">
+<div class="box">
+<h2 id="turn"></h2>
+<div id="status"></div>
+</div>
+
+<div class="box">
+<h2>🗺️ 人生マップ</h2>
+<div id="board"></div>
+</div>
+
+<div class="box">
+<h2>🎲 サイコロ</h2>
+<div id="dice">🎲</div>
+<button class="orange" id="roll" style="width:100%" onclick="rollDice()">ルーレットを回す！</button>
+</div>
+
+<div class="box">
+<h2>📜 イベント履歴</h2>
+<div id="log"></div>
+</div>
+</section>
+
+<section id="result" class="box">
+<h2>🏆 最終ランキング</h2>
+<div id="ranking"></div>
+<button onclick="location.reload()">もう一度遊ぶ</button>
+</section>
+</main>
+
+<div id="event">
+<div class="dialog">
+<h2 id="eventTitle"></h2>
+<p id="eventText"></p>
+<div id="eventButtons"></div>
+</div>
+</div>
+
+<script>
+const characters=[
+"日向翔陽","影山飛雄","月島 蛍","山口 忠",
+"西谷 夕","田中龍之介","及川 徹","岩泉 一",
+"黒尾鉄朗","孤爪研磨","木兎光太郎","赤葦京治",
+"牛島若利","天童 覚","宮 侑","宮 治"
+];
+
+const icons=["🏐","🐦","🦊","🐈"];
+
+const events=[
+["仲間との特訓","仲間と特訓！能力が上がり20万円獲得。",20],
+["アルバイト","アルバイトで15万円稼いだ！",15],
+["ケガ","練習中にケガ……治療費10万円。",-10],
+["全国大会","全国大会で大活躍！賞金30万円！",30],
+["臨時収入","思わぬ臨時収入！25万円獲得。",25],
+["遠征","遠征費用がかかった。15万円支払い。",-15],
+["友情","仲間との絆が深まった！10万円獲得。",10],
+["スランプ","スランプに陥った……20万円支払い。",-20],
+["大成功","努力が実った！40万円獲得！",40],
+["買い物","欲しかったものを購入！20万円支払い。",-20],
+["昇進","仕事で昇進！30万円獲得！",30],
+["旅行","仲間と旅行！15万円支払い。",-15],
+["同窓会","懐かしい仲間と再会！20万円獲得。",20],
+["ボーナス","特別ボーナス！50万円獲得！",50],
+["引っ越し","新生活の準備で25万円支払い。",-25],
+["プロ契約","プロ選手として契約！60万円獲得！",60],
+["結婚","結婚のお祝い！30万円獲得。",30],
+["大ピンチ","突然の出費！30万円支払い。",-30],
+["指導者","指導者として活躍！35万円獲得。",35],
+["ゴール","人生のゴールに到着！",0]
+];
+
+let players=[],turn=0,finished=0,busy=false;
+
+function makeInputs(){
+ const n=Number(document.getElementById("count").value);
+ const area=document.getElementById("inputs");
+ area.innerHTML="";
+ for(let i=0;i<n;i++){
+  area.innerHTML+=`
+  <div class="player">
+  <label>${i+1}P 名前</label>
+  <input id="name${i}" value="${i+1}P">
+  <label>キャラクター</label>
+  <select id="char${i}">
+  ${characters.map((c,j)=>`<option ${j===i?"selected":""}>${c}</option>`).join("")}
+  </select>
+  </div>`;
+ }
+}
+
+function startGame(){
+ const n=Number(document.getElementById("count").value);
+ players=[];
+ for(let i=0;i<n;i++){
+  players.push({
+   name:document.getElementById("name"+i).value||`${i+1}P`,
+   char:document.getElementById("char"+i).value,
+   money:100,pos:0,job:"高校生",done:false
+  });
+ }
+ document.getElementById("setup").style.display="none";
+ document.getElementById("game").style.display="block";
+ drawBoard();
+ render();
+ log("人生ゲームスタート！");
+}
+
+function drawBoard(){
+ const board=document.getElementById("board");
+ board.innerHTML="";
+ for(let i=0;i<20;i++){
+  board.innerHTML+=`<div class="cell" id="cell${i}">
+  ${i===0?"START":events[i][0]}
+  <span id="token${i}"></span></div>`;
+ }
+}
+
+function render(){
+ document.getElementById("turn").textContent=
+ players[turn].name+" の番";
+ document.getElementById("status").innerHTML=
+ players.map((p,i)=>`
+ <div class="player ${i===turn?"active":""}">
+ <b>${icons[i]} ${p.name}（${p.char}）</b>
+ <div class="money">${p.money}万円</div>
+ <small>${p.job} ／ ${p.done?"ゴール":p.pos+1+"マス目"}</small>
+ </div>`).join("");
+
+ for(let i=0;i<20;i++){
+  document.getElementById("token"+i).textContent=
+  players.filter(p=>p.pos===i).map(p=>
+  icons[players.indexOf(p)]).join("");
+ }
+ document.getElementById("roll").disabled=
+ players[turn].done||busy;
+}
+
+function log(t){
+ const area=document.getElementById("log");
+ area.innerHTML="<div>"+t+"</div>"+area.innerHTML;
+}
+
+function rollDice(){
+ if(busy)return;
+ busy=true;
+ const dice=1+Math.floor(Math.random()*6);
+ document.getElementById("dice").textContent="🎲 "+dice;
+ const p=players[turn];
+ p.pos=Math.min(19,p.pos+dice);
+ render();
+
+ setTimeout(()=>{
+  const e=events[p.pos];
+  let amount=e[2];
+  p.money=Math.max(0,p.money+amount);
+  if(p.pos===19){
+   p.done=true;
+   p.money+=50;
+   finished++;
+   amount+=50;
+  }
+  const message=e[1]+(p.pos===19?" ゴールボーナス50万円！":"");
+  log(p.name+"："+message);
+  showEvent(e[0],message,nextTurn);
+ },300);
+}
+
+function showEvent(title,text,callback){
+ document.getElementById("eventTitle").textContent="✨ "+title;
+ document.getElementById("eventText").textContent=text;
+ const buttons=document.getElementById("eventButtons");
+ buttons.innerHTML="";
+ const b=document.createElement("button");
+ b.className="orange";
+ b.textContent="次へ";
+ b.onclick=()=>{
+  document.getElementById("event").style.display="none";
+  callback();
+ };
+ buttons.appendChild(b);
+ document.getElementById("event").style.display="flex";
+}
+
+function nextTurn(){
+ if(finished===players.length){
+  endGame();
+  return;
+ }
+ let tries=0;
+ do{
+  turn=(turn+1)%players.length;
+  tries++;
+ }while(players[turn].done&&tries<=players.length);
+ busy=false;
+ render();
+}
+
+function endGame(){
+ document.getElementById("game").style.display="none";
+ document.getElementById("result").style.display="block";
+ const sorted=[...players].sort((a,b)=>b.money-a.money);
+ document.getElementById("ranking").innerHTML=
+ sorted.map((p,i)=>`
+ <div class="player">
+ <h2>${i+1}位 ${p.name}</h2>
+ ${p.char}<div class="money">${p.money}万円</div>
+ </div>`).join("");
+}
+
+makeInputs();
+</script>
+</body>
+</html>
